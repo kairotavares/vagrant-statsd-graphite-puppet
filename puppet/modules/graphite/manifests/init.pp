@@ -7,27 +7,48 @@ class graphite {
  $webapp_loc = "$build_dir/graphite-web.tar.gz"
 
   exec { "download-graphite-webapp":
-        command => "wget -O $webapp_loc $webapp_url",
-        creates => "$webapp_loc"
-   }
+    command => "wget -O $webapp_loc $webapp_url",
+    creates => "$webapp_loc"
+  }
 
-   exec { "unpack-webapp":
-     command => "tar -zxvf $webapp_loc",
-     cwd => $build_dir,
-     subscribe=> Exec[download-graphite-webapp],
-     refreshonly => true,
-   }
+  exec { "unpack-webapp":
+    command => "tar -zxvf $webapp_loc",
+    cwd => $build_dir,
+    subscribe=> Exec[download-graphite-webapp],
+    refreshonly => true,
+  }
 
-   exec { "install-webapp":
-     command => "python setup.py install",
-     cwd => "$build_dir/graphite-web-0.9.9",
-     require => Exec[unpack-webapp],
-     creates => "/opt/graphite/webapp"
-   }
+  exec { "install-webapp":
+    command => "python setup.py install",
+    cwd => "$build_dir/graphite-web-0.9.9",
+    require => Exec["unpack-webapp"],
+    creates => "/opt/graphite/webapp"
+  }
+
+  exec { "/opt/graphite/webapp/graphite/settings.py":
+    command => "python setup.py install",
+    cwd => "$build_dir/graphite-web-0.9.9",
+    require => Exec["install-webapp"],
+    creates => "/opt/graphite/webapp"
+  }->
+  file_line { 'Append a line to /tmp/eureka.txt':
+    path => '/tmp/eureka.txt',  
+    line => '
+      TEMPLATE_LOADERS = (
+        "django.template.loaders.filesystem.Loader",
+        "django.template.loaders.app_directories.Loader",
+      )
+      DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": os.path.join(STORAGE_DIR, "graphite.db"),
+        },
+      }',
+  }
 
   file { [ "/opt/graphite/storage", "/opt/graphite/storage/whisper" ]:
     owner => "www-data",
-    subscribe => Exec["install-webapp"],
+    subscribe => Exec["fix-webapp-settings"],
     mode => "0775",
   }
 
@@ -36,7 +57,7 @@ class graphite {
      cwd => "/opt/graphite/webapp/graphite",
      creates => "/opt/graphite/storage/graphite.db",
      subscribe => File["/opt/graphite/storage"],
-     require => [ File["/opt/graphite/webapp/graphite/initial_data.json"], Package["python-django-tagging"] ]
+     require => [ File["/opt/graphite/webapp/graphite/initial_data.json"], Package["python-django-tagging"], Exec["fix-webapp-settings"]]
    }
 
   file { "/opt/graphite/webapp/graphite/initial_data.json" :
