@@ -14,7 +14,7 @@ class graphite {
   exec { "unpack-webapp":
     command => "tar -zxvf $webapp_loc",
     cwd => $build_dir,
-    subscribe=> Exec[download-graphite-webapp],
+    subscribe=> Exec["download-graphite-webapp"],
     refreshonly => true,
   }
 
@@ -25,14 +25,12 @@ class graphite {
     creates => "/opt/graphite/webapp"
   }
 
-  exec { "/opt/graphite/webapp/graphite/settings.py":
+  file { "/opt/graphite/webapp/graphite/settings.py":
     command => "python setup.py install",
-    cwd => "$build_dir/graphite-web-0.9.9",
     require => Exec["install-webapp"],
-    creates => "/opt/graphite/webapp"
   }->
-  file_line { 'Append a line to /tmp/eureka.txt':
-    path => '/tmp/eureka.txt',  
+  file_line { 'Append a line to /opt/graphite/webapp/graphite/settings.py':
+    path => '/opt/graphite/webapp/graphite/settings.py',
     line => '
       TEMPLATE_LOADERS = (
         "django.template.loaders.filesystem.Loader",
@@ -48,7 +46,7 @@ class graphite {
 
   file { [ "/opt/graphite/storage", "/opt/graphite/storage/whisper" ]:
     owner => "www-data",
-    subscribe => Exec["fix-webapp-settings"],
+    subscribe => File["/opt/graphite/webapp/graphite/settings.py"],
     mode => "0775",
   }
 
@@ -57,7 +55,7 @@ class graphite {
      cwd => "/opt/graphite/webapp/graphite",
      creates => "/opt/graphite/storage/graphite.db",
      subscribe => File["/opt/graphite/storage"],
-     require => [ File["/opt/graphite/webapp/graphite/initial_data.json"], Package["python-django-tagging"], Exec["fix-webapp-settings"]]
+     require => [ File["/opt/graphite/webapp/graphite/initial_data.json"], Package["python-django-tagging"], File["/opt/graphite/webapp/graphite/settings.py"]]
    }
 
   file { "/opt/graphite/webapp/graphite/initial_data.json" :
